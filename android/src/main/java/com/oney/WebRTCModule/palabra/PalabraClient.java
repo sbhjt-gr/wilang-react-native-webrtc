@@ -320,8 +320,12 @@ public class PalabraClient implements AudioTrackSink {
         connected.set(false);
 
         if (remoteTrack != null) {
-            remoteTrack.removeSink(this);
-            remoteTrack.setVolume(1.0);
+            try {
+                remoteTrack.removeSink(this);
+                remoteTrack.setVolume(1.0);
+            } catch (Exception e) {
+                Log.w(TAG, "stop_track_cleanup_error: " + e.getMessage());
+            }
         }
 
         if (webSocket != null) {
@@ -333,12 +337,20 @@ public class PalabraClient implements AudioTrackSink {
             } catch (JSONException e) {
                 Log.e(TAG, "end_task_error", e);
             }
-            webSocket.close(1000, "stop");
+            try {
+                webSocket.close(1000, "stop");
+            } catch (Exception e) {
+                Log.w(TAG, "websocket_close_error: " + e.getMessage());
+            }
             webSocket = null;
         }
 
         if (audioPlayer != null) {
-            audioPlayer.stop();
+            try {
+                audioPlayer.stop();
+            } catch (Exception e) {
+                Log.w(TAG, "audio_player_stop_error: " + e.getMessage());
+            }
         }
 
         synchronized (bufferLock) {
