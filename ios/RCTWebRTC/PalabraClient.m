@@ -202,8 +202,11 @@ static const int kChunkBytes = kChunkSamples * 2;
     
     NSError *audioError;
     [self.audioEngine startAndReturnError:&audioError];
-    if (!audioError) {
+    if (audioError) {
+        NSLog(@"palabra_audio_engine_error: %@", audioError);
+    } else {
         [self.playerNode play];
+        NSLog(@"palabra_audio_engine_started");
     }
     
     [self notifyConnectionState:@"connected"];
@@ -308,12 +311,14 @@ static const int kChunkBytes = kChunkSamples * 2;
     }
     
     NSString *type = json[@"message_type"] ?: @"";
+    NSLog(@"palabra_msg: %@", type);
     
     if ([type isEqualToString:@"output_audio_data"]) {
         NSDictionary *data = json[@"data"];
         NSString *audioBase64 = data[@"data"] ?: @"";
         if (audioBase64.length > 0) {
             NSData *audioData = [[NSData alloc] initWithBase64EncodedString:audioBase64 options:0];
+            NSLog(@"palabra_audio_out: %lu bytes", (unsigned long)audioData.length);
             [self playAudio:audioData];
         }
     } else if ([type containsString:@"transcription"]) {
@@ -323,6 +328,7 @@ static const int kChunkBytes = kChunkSamples * 2;
             NSString *text = transcription[@"text"] ?: @"";
             NSString *lang = transcription[@"language"] ?: @"";
             BOOL isFinal = ![type isEqualToString:@"partial_transcription"];
+            NSLog(@"palabra_transcription: %@ (%@)", text, lang);
             
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self notifyTranscription:text language:lang isFinal:isFinal];
@@ -336,6 +342,8 @@ static const int kChunkBytes = kChunkSamples * 2;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self notifyError:err];
         });
+    } else if ([type isEqualToString:@"task_ready"]) {
+        NSLog(@"palabra_task_ready");
     }
 }
 
@@ -399,9 +407,23 @@ static const int kChunkBytes = kChunkSamples * 2;
 #pragma mark - RTCAudioRenderer
 
 - (void)renderPCMBuffer:(AVAudioPCMBuffer *)buffer {
-    if (!self.translating || !self.webSocket) return;
+    if (!self.translating || !self.webSocket) {
+        return;
+    }
+    
+    static int logCounter = 0;
+    if (logCounter++ % 100 == 0) {
+        NSLog(@"palabra_render_pcm: frames=%u rate=%.0f channels=%u", 
+              (unsigned int)buffer.frameLength, 
+              buffer.format.sampleRate, 
+              (unsigned int)buffer.format.channelCount);
+    }
     
     NSData *resampled = [self resampleBuffer:buffer toRate:kSampleRateIn channels:kChannels];
+    if (resampled.length == 0) {
+        NSLog(@"palabra_resample_empty");
+        return;
+    }
     
     [self.bufferLock lock];
     [self.audioBuffer appendData:resampled];
@@ -421,30 +443,58 @@ static const int kChunkBytes = kChunkSamples * 2;
     int srcChannels = (int)buffer.format.channelCount;
     int srcSamples = (int)buffer.frameLength;
     
-    if (srcRate == dstRate && srcChannels == dstChannels) {
-        if (buffer.format.commonFormat == AVAudioPCMFormatInt16) {
-            return [NSData dataWithBytes:buffer.int16ChannelData[0] length:srcSamples * 2];
-        }
+    if (srcSamples == 0) {
+        return [NSData data];
     }
     
-    float *srcData;
-    if (buffer.format.commonFormat == AVAudioPCMFormatFloat32) {
+    AVAudioCommonFormat format = buffer.format.commonFormat;
+    
+    if (srcRate == dstRate && srcChannels == dstChannels && format == AVAudioPCMFormatInt16) {
+        return [NSData dataWithBytes:buffer.int16ChannelData[0] length:srcSamples * 2];
+    }
+    
+    float *srcData = NULL;
+    float *tempFloat = NULL;
+    
+    if (format == AVAudioPCMFormatFloat32) {
         srcData = buffer.floatChannelData[0];
+    } else if (format == AVAudioPCMFormatInt16) {
+        tempFloat = malloc(srcSamples * sizeof(float));
+        int16_t *srcInt16 = buffer.int16ChannelData[0];
+        for (int i = 0; i < srcSamples; i++) {
+            tempFloat[i] = (float)srcInt16[i] / 32768.0f;
+        }
+        srcData = tempFloat;
     } else {
+        NSLog(@"palabra_unsupported_format: %ld", (long)format);
         return [NSData data];
     }
     
     float *monoSrc = srcData;
     float *monoBuffer = NULL;
-    if (srcChannels == 2 && buffer.floatChannelData[1]) {
+    if (srcChannels == 2) {
         monoBuffer = malloc(srcSamples * sizeof(float));
-        for (int i = 0; i < srcSamples; i++) {
-            monoBuffer[i] = (buffer.floatChannelData[0][i] + buffer.floatChannelData[1][i]) / 2.0f;
+        if (format == AVAudioPCMFormatFloat32 && buffer.floatChannelData[1]) {
+            for (int i = 0; i < srcSamples; i++) {
+                monoBuffer[i] = (buffer.floatChannelData[0][i] + buffer.floatChannelData[1][i]) / 2.0f;
+            }
+        } else if (format == AVAudioPCMFormatInt16 && buffer.int16ChannelData[1]) {
+            for (int i = 0; i < srcSamples; i++) {
+                float ch0 = (float)buffer.int16ChannelData[0][i] / 32768.0f;
+                float ch1 = (float)buffer.int16ChannelData[1][i] / 32768.0f;
+                monoBuffer[i] = (ch0 + ch1) / 2.0f;
+            }
+        } else {
+            for (int i = 0; i < srcSamples; i++) {
+                monoBuffer[i] = srcData[i];
+            }
         }
         monoSrc = monoBuffer;
     }
     
     int dstSamples = (int)((long)srcSamples * dstRate / srcRate);
+    if (dstSamples == 0) dstSamples = 1;
+    
     int16_t *dstData = malloc(dstSamples * sizeof(int16_t));
     
     for (int i = 0; i < dstSamples; i++) {
@@ -453,10 +503,12 @@ static const int kChunkBytes = kChunkSamples * 2;
         int idx1 = MIN(idx0 + 1, srcSamples - 1);
         float frac = srcIdx - idx0;
         float sample = monoSrc[idx0] * (1 - frac) + monoSrc[idx1] * frac;
+        sample = fmaxf(-1.0f, fminf(1.0f, sample));
         dstData[i] = (int16_t)(sample * 32767.0f);
     }
     
     if (monoBuffer) free(monoBuffer);
+    if (tempFloat) free(tempFloat);
     
     NSData *result = [NSData dataWithBytes:dstData length:dstSamples * 2];
     free(dstData);
@@ -465,6 +517,11 @@ static const int kChunkBytes = kChunkSamples * 2;
 
 - (void)sendAudioChunk:(NSData *)chunk {
     if (!self.webSocket || !self.connected) return;
+    
+    static int sendCounter = 0;
+    if (sendCounter++ % 50 == 0) {
+        NSLog(@"palabra_send_chunk: %lu bytes (count=%d)", (unsigned long)chunk.length, sendCounter);
+    }
     
     NSString *base64 = [chunk base64EncodedStringWithOptions:0];
     NSDictionary *msg = @{
@@ -478,7 +535,11 @@ static const int kChunkBytes = kChunkSamples * 2;
     NSString *payload = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     
     NSURLSessionWebSocketMessage *wsMsg = [[NSURLSessionWebSocketMessage alloc] initWithString:payload];
-    [self.webSocket sendMessage:wsMsg completionHandler:nil];
+    [self.webSocket sendMessage:wsMsg completionHandler:^(NSError *error) {
+        if (error) {
+            NSLog(@"palabra_chunk_send_error: %@", error);
+        }
+    }];
 }
 
 #pragma mark - Notifications
@@ -503,6 +564,21 @@ static const int kChunkBytes = kChunkSamples * 2;
             @"isFinal": @(isFinal)
         }];
     }
+}
+
+#pragma mark - NSURLSessionWebSocketDelegate
+
+- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didOpenWithProtocol:(NSString *)protocol {
+    NSLog(@"palabra_ws_opened");
+}
+
+- (void)URLSession:(NSURLSession *)session webSocketTask:(NSURLSessionWebSocketTask *)webSocketTask didCloseWithCode:(NSURLSessionWebSocketCloseCode)closeCode reason:(NSData *)reason {
+    NSLog(@"palabra_ws_closed: %ld", (long)closeCode);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.translating) {
+            [self stop];
+        }
+    });
 }
 
 @end
