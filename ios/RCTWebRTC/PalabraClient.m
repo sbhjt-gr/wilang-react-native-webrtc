@@ -2,10 +2,11 @@
 #import "WebRTCModule.h"
 #import <AVFoundation/AVFoundation.h>
 
-static const int kSampleRate = 16000;
+static const int kSampleRateIn = 16000;
+static const int kSampleRateOut = 24000;
 static const int kChannels = 1;
 static const int kChunkMs = 320;
-static const int kChunkSamples = kSampleRate * kChunkMs / 1000;
+static const int kChunkSamples = kSampleRateIn * kChunkMs / 1000;
 static const int kChunkBytes = kChunkSamples * 2;
 
 @interface PalabraClient () <NSURLSessionWebSocketDelegate, RTCAudioRenderer>
@@ -78,7 +79,7 @@ static const int kChunkBytes = kChunkSamples * 2;
     [self.audioEngine attachNode:self.playerNode];
     
     self.audioFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatInt16
-                                                        sampleRate:kSampleRate
+                                                        sampleRate:kSampleRateOut
                                                           channels:kChannels
                                                        interleaved:YES];
     
@@ -248,7 +249,7 @@ static const int kChunkBytes = kChunkSamples * 2;
                 @"source": @{
                     @"type": @"ws",
                     @"format": @"pcm_s16le",
-                    @"sample_rate": @(kSampleRate),
+                    @"sample_rate": @(kSampleRateIn),
                     @"channels": @(kChannels)
                 }
             },
@@ -400,7 +401,7 @@ static const int kChunkBytes = kChunkSamples * 2;
 - (void)renderPCMBuffer:(AVAudioPCMBuffer *)buffer {
     if (!self.translating || !self.webSocket) return;
     
-    NSData *resampled = [self resampleBuffer:buffer toRate:kSampleRate channels:kChannels];
+    NSData *resampled = [self resampleBuffer:buffer toRate:kSampleRateIn channels:kChannels];
     
     [self.bufferLock lock];
     [self.audioBuffer appendData:resampled];

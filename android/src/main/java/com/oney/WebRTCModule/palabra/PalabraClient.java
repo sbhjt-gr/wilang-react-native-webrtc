@@ -37,10 +37,11 @@ import okhttp3.WebSocketListener;
 
 public class PalabraClient implements AudioTrackSink {
     private static final String TAG = "PalabraClient";
-    private static final int SAMPLE_RATE = 16000;
+    private static final int SAMPLE_RATE_IN = 16000;
+    private static final int SAMPLE_RATE_OUT = 24000;
     private static final int CHANNELS = 1;
     private static final int CHUNK_MS = 320;
-    private static final int CHUNK_SAMPLES = SAMPLE_RATE * CHUNK_MS / 1000;
+    private static final int CHUNK_SAMPLES = SAMPLE_RATE_IN * CHUNK_MS / 1000;
     private static final int CHUNK_BYTES = CHUNK_SAMPLES * 2;
 
     private final Context context;
@@ -89,14 +90,13 @@ public class PalabraClient implements AudioTrackSink {
     }
 
     private void setupAudioPlayer() {
-        int sampleRate = 16000;
         int channelConfig = AudioFormat.CHANNEL_OUT_MONO;
         int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-        int bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2;
+        int bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE_OUT, channelConfig, audioFormat) * 2;
 
         audioPlayer = new AudioTrack(
             AudioManager.STREAM_VOICE_CALL,
-            sampleRate,
+            SAMPLE_RATE_OUT,
             channelConfig,
             audioFormat,
             bufferSize,
@@ -233,7 +233,7 @@ public class PalabraClient implements AudioTrackSink {
             JSONObject source = new JSONObject();
             source.put("type", "ws");
             source.put("format", "pcm_s16le");
-            source.put("sample_rate", SAMPLE_RATE);
+            source.put("sample_rate", SAMPLE_RATE_IN);
             source.put("channels", CHANNELS);
             inputStream.put("source", source);
             data.put("input_stream", inputStream);
@@ -358,7 +358,7 @@ public class PalabraClient implements AudioTrackSink {
         byte[] samples = new byte[audioData.remaining()];
         audioData.get(samples);
 
-        byte[] resampled = resample(samples, sampleRate, channels, SAMPLE_RATE, CHANNELS);
+        byte[] resampled = resample(samples, sampleRate, channels, SAMPLE_RATE_IN, CHANNELS);
 
         synchronized (bufferLock) {
             try {
