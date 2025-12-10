@@ -1,16 +1,34 @@
 [<img src="https://avatars.githubusercontent.com/u/42463376" alt="React Native WebRTC" style="height: 6em;" />](https://github.com/react-native-webrtc/react-native-webrtc)
 
-# React-Native-WebRTC for LiveKit
+# React-Native-WebRTC for LiveKit (WiLang Fork)
 [![npm version](https://img.shields.io/npm/v/@livekit/react-native-webrtc)](https://www.npmjs.com/package/@livekit/react-native-webrtc)
 [![Discourse topics](https://img.shields.io/discourse/topics?server=https%3A%2F%2Freact-native-webrtc.discourse.group%2F)](https://react-native-webrtc.discourse.group/)
 
-A WebRTC module for React Native.
+A WebRTC module for React Native with native Palabra AI translation support.
 
 > [!NOTE]
-> This is a fork of the original [react-native-webrtc](https://github.com/react-native-webrtc/react-native-webrtc) repo, with different underlying WebRTC fork.
-> This module is primarily to be used in conjunction with the [LiveKit React Native SDK](https://github.com/livekit/client-sdk-react-native), and shouldn't be used independently.
->
-> Developers looking to add WebRTC without LiveKit functionality to their React Native projects should use the original module instead.
+> This is a fork with integrated Palabra translation for real-time speech-to-speech translation during WebRTC calls.
+> Used by WiLang app for video/voice call translation.
+
+## Palabra Translation
+
+This fork adds native Palabra AI integration for translating remote peer audio in real-time:
+
+```javascript
+import { startPalabraTranslation, stopPalabraTranslation } from '@livekit/react-native-webrtc';
+
+await startPalabraTranslation(
+  peerConnectionId,
+  remoteAudioTrackId,
+  PALABRA_CLIENT_ID,
+  PALABRA_CLIENT_SECRET,
+  'en',
+  'es',
+  'https://api.palabra.ai'
+);
+
+await stopPalabraTranslation();
+```
 
 ## Feature Overview
 
