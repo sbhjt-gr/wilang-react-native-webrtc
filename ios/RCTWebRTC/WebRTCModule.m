@@ -141,7 +141,10 @@ RCT_EXPORT_MODULE();
         kEventMediaStreamTrackEnded,
         kEventPeerConnectionOnRemoveTrack,
         kEventPeerConnectionOnTrack,
-        kEventFrameCryptionStateChanged
+        kEventFrameCryptionStateChanged,
+        kEventPalabraTranscription,
+        kEventPalabraConnectionState,
+        kEventPalabraError
     ];
 }
 

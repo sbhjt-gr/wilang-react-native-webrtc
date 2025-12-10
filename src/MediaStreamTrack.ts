@@ -9,6 +9,19 @@ import { deepClone, normalizeConstraints } from './RTCUtil';
 const log = new Logger('pc');
 const { WebRTCModule } = NativeModules;
 
+export type PalabraConfig = {
+    clientId: string;
+    clientSecret: string;
+    sourceLang: string;
+    targetLang: string;
+    apiUrl?: string;
+};
+
+export type PalabraTranscription = {
+    text: string;
+    lang: string;
+    isFinal: boolean;
+};
 
 type MediaStreamTrackState = 'live' | 'ended';
 
@@ -200,6 +213,32 @@ export default class MediaStreamTrack extends EventTarget<MediaStreamTrackEventM
 
     getCapabilities(): never {
         throw new Error('Not implemented.');
+    }
+
+    async startPalabraTranslation(config: PalabraConfig): Promise<void> {
+        if (!this.remote) {
+            throw new Error('only_remote_tracks');
+        }
+        if (this.kind !== 'audio') {
+            throw new Error('only_audio_tracks');
+        }
+        if (this._readyState === 'ended') {
+            throw new Error('track_ended');
+        }
+
+        return WebRTCModule.startPalabraTranslation(
+            this._peerConnectionId,
+            this.id,
+            config.clientId,
+            config.clientSecret,
+            config.sourceLang,
+            config.targetLang,
+            config.apiUrl || 'https://api.palabra.ai'
+        );
+    }
+
+    async stopPalabraTranslation(): Promise<void> {
+        return WebRTCModule.stopPalabraTranslation();
     }
 
     getConstraints() {

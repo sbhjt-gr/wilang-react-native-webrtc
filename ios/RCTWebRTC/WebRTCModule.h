@@ -7,6 +7,8 @@
 
 #import <WebRTC/WebRTC.h>
 
+@class PalabraClient;
+
 static NSString *const kEventPeerConnectionSignalingStateChanged = @"peerConnectionSignalingStateChanged";
 static NSString *const kEventPeerConnectionStateChanged = @"peerConnectionStateChanged";
 static NSString *const kEventPeerConnectionOnRenegotiationNeeded = @"peerConnectionOnRenegotiationNeeded";
@@ -22,6 +24,9 @@ static NSString *const kEventMediaStreamTrackEnded = @"mediaStreamTrackEnded";
 static NSString *const kEventPeerConnectionOnRemoveTrack = @"peerConnectionOnRemoveTrack";
 static NSString *const kEventPeerConnectionOnTrack = @"peerConnectionOnTrack";
 static NSString *const kEventFrameCryptionStateChanged = @"frameCryptionStateChanged";
+static NSString *const kEventPalabraTranscription = @"palabraTranscription";
+static NSString *const kEventPalabraConnectionState = @"palabraConnectionState";
+static NSString *const kEventPalabraError = @"palabraError";
 
 @interface WebRTCModule : RCTEventEmitter<RCTBridgeModule>
 
@@ -38,6 +43,8 @@ static NSString *const kEventFrameCryptionStateChanged = @"frameCryptionStateCha
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptor *> *frameCryptors;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCFrameCryptorKeyProvider *> *keyProviders;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, RTCDataPacketCryptor *> *dataPacketCryptors;
+
+@property(nonatomic, strong) PalabraClient *palabraClient;
 
 - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag;
 

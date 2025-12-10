@@ -24,6 +24,9 @@ const NATIVE_EVENTS = [
     'mediaStreamTrackMuteChanged',
     'mediaStreamTrackEnded',
     'frameCryptionStateChanged',
+    'palabraTranscription',
+    'palabraConnectionState',
+    'palabraError',
 ];
 
 const eventEmitter = new EventEmitter();

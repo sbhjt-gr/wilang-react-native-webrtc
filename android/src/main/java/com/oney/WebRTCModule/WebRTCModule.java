@@ -23,6 +23,9 @@ import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.oney.WebRTCModule.webrtcutils.H264AndSoftwareVideoDecoderFactory;
 import com.oney.WebRTCModule.webrtcutils.H264AndSoftwareVideoEncoderFactory;
+import com.oney.WebRTCModule.palabra.PalabraClient;
+import com.oney.WebRTCModule.palabra.PalabraConfig;
+import com.oney.WebRTCModule.palabra.PalabraListener;
 
 import org.webrtc.AddIceObserver;
 import org.webrtc.AudioProcessingFactory;
@@ -74,6 +77,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     final Map<String, MediaStream> localStreams;
 
     private final GetUserMediaImpl getUserMediaImpl;
+
+    private PalabraClient palabraClient;
 
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -1566,5 +1571,73 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void removeListeners(Integer count) {
         // Keep: Required for RN built in Event Emitter Calls.
+    }
+
+    @ReactMethod
+    public void startPalabraTranslation(int peerConnectionId, String trackId, String clientId,
+                                        String clientSecret, String sourceLang, String targetLang,
+                                        String apiUrl, Promise promise) {
+        PeerConnectionObserver pco = mPeerConnectionObservers.get(peerConnectionId);
+        if (pco == null) {
+            promise.reject("E_INVALID", "pc_not_found");
+            return;
+        }
+
+        MediaStreamTrack track = pco.remoteTracks.get(trackId);
+        if (track == null) {
+            promise.reject("E_INVALID", "track_not_found");
+            return;
+        }
+
+        if (!(track instanceof AudioTrack)) {
+            promise.reject("E_INVALID", "not_audio_track");
+            return;
+        }
+
+        AudioTrack audioTrack = (AudioTrack) track;
+
+        if (palabraClient != null) {
+            palabraClient.stop();
+        }
+
+        PalabraConfig config = new PalabraConfig(clientId, clientSecret, sourceLang, targetLang, apiUrl);
+        palabraClient = new PalabraClient(getReactApplicationContext(), config);
+        palabraClient.setListener(new PalabraListener() {
+            @Override
+            public void onTranscription(String text, String lang, boolean isFinal) {
+                WritableMap params = Arguments.createMap();
+                params.putString("text", text);
+                params.putString("lang", lang);
+                params.putBoolean("isFinal", isFinal);
+                sendEvent("palabraTranscription", params);
+            }
+
+            @Override
+            public void onConnectionState(String state) {
+                WritableMap params = Arguments.createMap();
+                params.putString("state", state);
+                sendEvent("palabraConnectionState", params);
+            }
+
+            @Override
+            public void onError(int code, String message) {
+                WritableMap params = Arguments.createMap();
+                params.putInt("code", code);
+                params.putString("message", message);
+                sendEvent("palabraError", params);
+            }
+        });
+
+        palabraClient.start(audioTrack);
+        promise.resolve(null);
+    }
+
+    @ReactMethod
+    public void stopPalabraTranslation(Promise promise) {
+        if (palabraClient != null) {
+            palabraClient.stop();
+            palabraClient = null;
+        }
+        promise.resolve(null);
     }
 }
